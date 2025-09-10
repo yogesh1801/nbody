@@ -1,117 +1,123 @@
-# OpenMP（target指示文）実装の概要
+# Overview of OpenMP (target directive) Implementation
 
-OpenMP（target指示文）を用いた$N$体計算コード（直接法）の実装概要の紹介
+Introduction to the implementation of an \$N\$-body simulation code (direct method) using OpenMP (target directive).
 
-## 実装方法
+## Implementation Method
 
-* GPU上で計算させたいfor文に指示文を追加
+* Add directives to the `for` loops that you want to execute on the GPU:
 
-   ```c++
-   #pragma omp target teams distribute parallel for simd
-   for(int32_t ii = 0; ii < num; ii++){
-     ...
-   }
-   ```
+  ```c++
+  #pragma omp target teams distribute parallel for simd
+  for(int32_t ii = 0; ii < num; ii++){
+    ...
+  }
+  ```
 
-  * simd 指示節の指定はなくても良い
-  * オプション：スレッドブロックあたりのスレッド数を示唆
+  * The `simd` clause is optional.
 
-     ```c++
-     #pragma omp target teams distribute parallel for simd thread_limit(256)
-     for(int32_t ii = 0; ii < num; ii++){
-       ...
-     }
-     ```
+  * Option: Suggest the number of threads per thread block.
 
-  * loop 指示節を使用する場合の実装
+    ```c++
+    #pragma omp target teams distribute parallel for simd thread_limit(256)
+    for(int32_t ii = 0; ii < num; ii++){
+      ...
+    }
+    ```
 
-     ```c++
-     #pragma omp target teams loop
-     for(int32_t ii = 0; ii < num; ii++){
-       ...
-     }
-     ```
+  * Implementation using the `loop` clause:
 
-    * オプション：スレッドブロックあたりのスレッド数を示唆
+    ```c++
+    #pragma omp target teams loop
+    for(int32_t ii = 0; ii < num; ii++){
+      ...
+    }
+    ```
 
-       ```c++
-       #pragma omp target teams loop thread_limit(256)
-       for(int32_t ii = 0; ii < num; ii++){
-         ...
-       }
-       ```
+    * Option: Suggest the number of threads per thread block.
 
-* （Unified Memoryを使わない場合）データ指示文を追加
-  1. GPU上のメモリ確保
+      ```c++
+      #pragma omp target teams loop thread_limit(256)
+      for(int32_t ii = 0; ii < num; ii++){
+        ...
+      }
+      ```
+
+* If **Unified Memory** is not used, add data directives:
+
+  1. Allocate memory on the GPU:
 
      ```c++
      #pragma omp target enter data map(alloc: ptr[0:num])
      ```
 
-  2. CPUからGPUへのデータ転送
+  2. Transfer data from CPU to GPU:
 
      ```c++
      #pragma omp target update to(ptr[0:num])
      ```
 
-  3. GPUからCPUへのデータ転送
+  3. Transfer data from GPU to CPU:
 
      ```c++
      #pragma omp target update from(ptr[0:num])
      ```
 
-  4. GPU上のメモリ解放
+  4. Free memory on the GPU:
 
      ```c++
      #pragma omp target exit data map(delete: ptr[0:num])
      ```
 
-## 実装例
+## Implementation Examples
 
-| ソースコード | 実装概要 | 備考 |
-| ---- | ---- | ---- |
-| [cpp/openmp/0_dist/nbody_leapfrog2.cpp](/cpp/openmp/0_dist/nbody_leapfrog2.cpp) | distribute指示節を用いた実装，Unified Memoryを用いた実装，Leapfrog法 | |
-| [cpp/openmp/1_dist_data/nbody_leapfrog2.cpp](/cpp/openmp/1_dist_data/nbody_leapfrog2.cpp) | distribute指示節を用いた実装，データ指示文を用いた実装，Leapfrog法 | |
-| [cpp/openmp/a_loop/nbody_leapfrog2.cpp](/cpp/openmp/a_loop/nbody_leapfrog2.cpp) | loop指示節を用いた実装，Unified Memoryを用いた実装，Leapfrog法 | |
-| [cpp/openmp/b_loop_data/nbody_leapfrog2.cpp](/cpp/openmp/b_loop_data/nbody_leapfrog2.cpp) | loop指示節を用いた実装，データ指示文を用いた実装，Leapfrog法 | |
-| [cpp/openmp/0_dist/nbody_hermite4.cpp](/cpp/openmp/0_dist/nbody_hermite4.cpp) | distribute指示節を用いた実装，Unified Memoryを用いた実装，Hermite法 | 一部関数のGPU化を無効化 |
-| [cpp/openmp/1_dist_data/nbody_hermite4.cpp](/cpp/openmp/1_dist_data/nbody_hermite4.cpp) | distribute指示節を用いた実装，データ指示文を用いた実装，Hermite法 | 一部関数のGPU化を無効化 |
-| [cpp/openmp/a_loop/nbody_hermite4.cpp](/cpp/openmp/a_loop/nbody_hermite4.cpp) | loop指示節を用いた実装，Unified Memoryを用いた実装，Hermite法 | 一部関数のGPU化を無効化 |
-| [cpp/openmp/b_loop_data/nbody_hermite4.cpp](/cpp/openmp/b_loop_data/nbody_hermite4.cpp) | loop指示節を用いた実装，データ指示文を用いた実装，Hermite法 | 一部関数のGPU化を無効化 |
+| Source Code                                                                                  | Implementation Overview                                                    | Notes                                     |
+| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------- |
+| [cpp/openmp/0\_dist/nbody\_leapfrog2.cpp](/cpp/openmp/0_dist/nbody_leapfrog2.cpp)            | Implementation using `distribute` clause, Unified Memory, Leapfrog method  |                                           |
+| [cpp/openmp/1\_dist\_data/nbody\_leapfrog2.cpp](/cpp/openmp/1_dist_data/nbody_leapfrog2.cpp) | Implementation using `distribute` clause, data directives, Leapfrog method |                                           |
+| [cpp/openmp/a\_loop/nbody\_leapfrog2.cpp](/cpp/openmp/a_loop/nbody_leapfrog2.cpp)            | Implementation using `loop` clause, Unified Memory, Leapfrog method        |                                           |
+| [cpp/openmp/b\_loop\_data/nbody\_leapfrog2.cpp](/cpp/openmp/b_loop_data/nbody_leapfrog2.cpp) | Implementation using `loop` clause, data directives, Leapfrog method       |                                           |
+| [cpp/openmp/0\_dist/nbody\_hermite4.cpp](/cpp/openmp/0_dist/nbody_hermite4.cpp)              | Implementation using `distribute` clause, Unified Memory, Hermite method   | Some functions disabled for GPU execution |
+| [cpp/openmp/1\_dist\_data/nbody\_hermite4.cpp](/cpp/openmp/1_dist_data/nbody_hermite4.cpp)   | Implementation using `distribute` clause, data directives, Hermite method  | Some functions disabled for GPU execution |
+| [cpp/openmp/a\_loop/nbody\_hermite4.cpp](/cpp/openmp/a_loop/nbody_hermite4.cpp)              | Implementation using `loop` clause, Unified Memory, Hermite method         | Some functions disabled for GPU execution |
+| [cpp/openmp/b\_loop\_data/nbody\_hermite4.cpp](/cpp/openmp/b_loop_data/nbody_hermite4.cpp)   | Implementation using `loop` clause, data directives, Hermite method        | Some functions disabled for GPU execution |
 
-* 一部関数のGPU化について
-  * GPU上で動作させるとコードが正常に動作しなくなる関数があったため，暫定的にCPU上で動作させることにしている
-    * CUDA版ではGPU上で正常に動作するため，実装ミスやコンパイラのバグなどが原因と考えられる
-  * マクロ `EXEC_SMALL_FUNC_ON_HOST` を有効化（= 一部の OpenMP 指示文をコメントアウト）している
-  * 小さい関数なので，実行時間への影響も小さいと考えている
-  * 余分なCPU-GPU間のデータ転送が生じてしまっている
+* Regarding functions disabled for GPU execution:
 
-## NVIDIA HPC SDKに関する情報
+  * Some functions did not run correctly on the GPU, so they are temporarily executed on the CPU.
 
-### コンパイル・リンク
+    * In the CUDA version, they run correctly on the GPU, so the cause is likely an implementation mistake or a compiler bug.
+  * Macro `EXEC_SMALL_FUNC_ON_HOST` is enabled (some OpenMP directives are commented out).
+  * Since these are small functions, the performance impact is expected to be minimal.
+  * However, this results in additional CPU-GPU data transfers.
 
-* 標準的な引数（コンパイル時）
+## Information on NVIDIA HPC SDK
 
-  ```sh
-  -mp=gpu -gpu=cc90 -Minfo=accel,opt,mp # OpenMPを使用してGPU化，cc90（NVIDIA H100）向けに最適化，GPUオフローディングや性能最適化に関するコンパイラメッセージを出力
-  -mp=gpu -gpu=cc90,mem:unified:nomanagedalloc -Minfo=accel,opt,mp # NVIDIA GH200上でUnified Memoryを使用する際のお勧め設定
-  -mp=gpu -gpu=cc90,managed -Minfo=accel,opt,mp # NVIDIA GH200以外の環境（x86 CPUとNVIDIA GPUの組み合わせ）でUnified Memoryを使用する際の設定
-  ```
+### Compilation and Linking
 
-* 標準的な引数（リンク時）
+* Typical compiler options:
 
   ```sh
-  -mp=gpu      # 指定し忘れると，GPU上では動作しない
-  -gpu=mem:unified:nomanagedalloc # Unified Memory 使用時にはこれもつける（NVIDIA GH200）
-  -gpu=managed # Unified Memory 使用時にはこれもつける（NVIDIA GH200以外の環境：x86 CPUとNVIDIA GPUの組み合わせ）
+  -mp=gpu -gpu=cc90 -Minfo=accel,opt,mp # Offload to GPU using OpenMP, optimized for cc90 (NVIDIA H100), outputs compiler messages on GPU offloading and optimizations
+  -mp=gpu -gpu=cc90,mem:unified:nomanagedalloc -Minfo=accel,opt,mp # Recommended settings for Unified Memory on NVIDIA GH200
+  -mp=gpu -gpu=cc90,managed -Minfo=accel,opt,mp # Settings for Unified Memory on non-GH200 environments (x86 CPU + NVIDIA GPU)
   ```
 
-### 実行時
-
-* デバッグ時に便利な環境変数
+* Typical linker options:
 
   ```sh
-  NVCOMPILER_ACC_NOTIFY=1 ./a.out # GPU 上でカーネルが実行される度に情報を出力する
-  NVCOMPILER_ACC_NOTIFY=3 ./a.out # CPU-GPU 間のデータ転送に関する情報も出力する
-  NVCOMPILER_ACC_TIME=1 ./a.out   # CPU-GPU 間のデータ転送および GPU 上での実行時間を出力する
+  -mp=gpu      # Required, otherwise it won’t run on the GPU
+  -gpu=mem:unified:nomanagedalloc # Add this when using Unified Memory (NVIDIA GH200)
+  -gpu=managed # Add this when using Unified Memory (non-GH200: x86 CPU + NVIDIA GPU)
   ```
+
+### Runtime
+
+* Useful environment variables for debugging:
+
+  ```sh
+  NVCOMPILER_ACC_NOTIFY=1 ./a.out # Prints info every time a kernel runs on the GPU
+  NVCOMPILER_ACC_NOTIFY=3 ./a.out # Also prints info on CPU-GPU data transfers
+  NVCOMPILER_ACC_TIME=1 ./a.out   # Prints CPU-GPU transfer times and GPU execution time
+  ```
+
+---
