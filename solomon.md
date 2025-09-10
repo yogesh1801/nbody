@@ -1,92 +1,97 @@
-# Solomon 実装の概要
+# Overview of Solomon Implementation
 
-[Solomon](https://github.com/ymiki-repo/solomon) を用いた$N$体計算コード（直接法）の実装概要の紹介
+Introduction to the implementation of an \$N\$-body simulation code (direct method) using [Solomon](https://github.com/ymiki-repo/solomon).
 
-## Solomon の概要
+## Overview of Solomon
 
-* Solomon (Simple Off-LOading Macros Orchestrating multiple Notations) は，GPU 向けの指示文である OpenACC や OpenMP target のインタフェースを統合したマクロライブラリです
-  * [OpenACC](openacc.md) と [OpenMP target](openmp.md) の両方に対応したコードを簡易に実装できるようになります
-  * 実装の概要は [Solomonのリポジトリ](https://github.com/ymiki-repo/solomon) 中の [日本語版README](https://github.com/ymiki-repo/solomon/blob/main/README_jp.md) を参照してください
-  * 実装の詳細は [Miki & Hanawa (2024, IEEE Access, vol. 12, pp. 181644-181665)](https://doi.org/10.1109/ACCESS.2024.3509380) を参照してください
-    * Solomon を利用した論文においては，[Miki & Hanawa (2024, IEEE Access, vol. 12, pp. 181644-181665)](https://doi.org/10.1109/ACCESS.2024.3509380) を引用してください
+* Solomon (Simple Off-LOading Macros Orchestrating multiple Notations) is a macro library that unifies the interfaces of GPU directives such as OpenACC and OpenMP target.
 
-## 実装方法
+  * It enables easy implementation of code that supports both [OpenACC](openacc.md) and [OpenMP target](openmp.md).
+  * For an overview of the implementation, see the [Japanese README](https://github.com/ymiki-repo/solomon/blob/main/README_jp.md) in the [Solomon repository](https://github.com/ymiki-repo/solomon).
+  * For detailed implementation information, refer to [Miki & Hanawa (2024, IEEE Access, vol. 12, pp. 181644–181665)](https://doi.org/10.1109/ACCESS.2024.3509380).
 
-* Solomon のヘッダファイルをインクルード
+    * When citing work that uses Solomon, please reference [Miki & Hanawa (2024, IEEE Access, vol. 12, pp. 181644–181665)](https://doi.org/10.1109/ACCESS.2024.3509380).
 
-   ```c++
-   #include <solomon.hpp>
-   ```
+## Implementation Method
 
-* GPU上で計算させたいfor文に指示文を追加
+* Include the Solomon header file:
 
-   ```c++
-   OFFLOAD(AS_INDEPENDENT)
-   for(int32_t ii = 0; ii < num; ii++){
-     ...
-   }
-   ```
+  ```c++
+  #include <solomon.hpp>
+  ```
 
-  * オプション：スレッドブロックあたりのスレッド数を示唆
+* Add directives to the `for` loops you want to execute on the GPU:
 
-     ```c++
-     OFFLOAD(AS_INDEPENDENT, NUM_THREADS(256))
-     for(int32_t ii = 0; ii < num; ii++){
-       ...
-     }
-     ```
+  ```c++
+  OFFLOAD(AS_INDEPENDENT)
+  for(int32_t ii = 0; ii < num; ii++){
+    ...
+  }
+  ```
 
-* （Unified Memoryを使わない場合）データ指示文を追加
-  1. GPU上のメモリ確保
+  * Option: Suggest the number of threads per thread block:
+
+    ```c++
+    OFFLOAD(AS_INDEPENDENT, NUM_THREADS(256))
+    for(int32_t ii = 0; ii < num; ii++){
+      ...
+    }
+    ```
+
+* If **Unified Memory** is not used, add data directives:
+
+  1. Allocate memory on the GPU:
 
      ```c++
      MALLOC_ON_DEVICE(ptr[0:num])
      ```
 
-  2. CPUからGPUへのデータ転送
+  2. Transfer data from CPU to GPU:
 
      ```c++
      MEMCPY_H2D(ptr[0:num])
      ```
 
-  3. GPUからCPUへのデータ転送
+  3. Transfer data from GPU to CPU:
 
      ```c++
      MEMCPY_D2H(ptr[0:num])
      ```
 
-  4. GPU上のメモリ解放
+  4. Free memory on the GPU:
 
      ```c++
      FREE_FROM_DEVICE(ptr[0:num])
      ```
 
-## 実装例
+## Implementation Examples
 
-| ソースコード | 実装概要 | 備考 |
-| ---- | ---- | ---- |
-| [cpp/solomon/nbody_leapfrog2.cpp](/cpp/solomon/nbody_leapfrog2.cpp) | データ指示文を用いた実装，Leapfrog法 | |
-| [cpp/solomon/nbody_hermite4.cpp](/cpp/solomon/nbody_hermite4.cpp) | データ指示文を用いた実装，Hermite法 | 一部関数のGPU化を無効化 |
+| Source Code                                                          | Implementation Overview                               | Notes                                     |
+| -------------------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------- |
+| [cpp/solomon/nbody\_leapfrog2.cpp](/cpp/solomon/nbody_leapfrog2.cpp) | Implementation using data directives, Leapfrog method |                                           |
+| [cpp/solomon/nbody\_hermite4.cpp](/cpp/solomon/nbody_hermite4.cpp)   | Implementation using data directives, Hermite method  | Some functions disabled for GPU execution |
 
-* 一部関数のGPU化について
-  * GPU上で動作させるとコードが正常に動作しなくなる関数があったため，暫定的にCPU上で動作させることにしている
-    * CUDA版ではGPU上で正常に動作するため，実装ミスやコンパイラのバグなどが原因と考えられる
-  * マクロ `EXEC_SMALL_FUNC_ON_HOST` を有効化（= 一部の OpenACC 指示文をコメントアウト）している
-  * 小さい関数なので，実行時間への影響も小さいと考えている
-  * 余分なCPU-GPU間のデータ転送が生じてしまっている
+* Regarding functions disabled for GPU execution:
 
-## コンパイル方法
+  * Some functions did not run correctly on the GPU, so they are temporarily executed on the CPU.
 
-* コンパイラオプションを用いて，[OpenACC](openacc.md) または [OpenMP target](openmp.md) を有効化してください
-* Solomon のパス（`solomon.hpp` があるディレクトリ）を `-I/path/to/solomon` などとして指示してください
-* 下記のコンパイルフラグを用いて，Solomon の動作モードを指定してください
+    * In the CUDA version, they run correctly on the GPU, so the cause is likely an implementation error or a compiler bug.
+  * The macro `EXEC_SMALL_FUNC_ON_HOST` is enabled (some OpenACC directives are commented out).
+  * Since these functions are small, the impact on execution time is expected to be minimal.
+  * However, this does result in additional CPU–GPU data transfers.
 
-  | コンパイルフラグ | 使用されるバックエンド | 備考 |
-  | ---- | ---- | ---- |
-  | `-DOFFLOAD_BY_OPENACC` | OpenACC | デフォルトでは `kernels` 構文を使用 |
-  | `-DOFFLOAD_BY_OPENACC -DOFFLOAD_BY_OPENACC_PARALLEL` | OpenACC | デフォルトでは `parallel` 構文を使用 |
-  | `-DOFFLOAD_BY_OPENMP_TARGET` | OpenMP target | デフォルトでは `loop` 指示文を使用 |
-  | `-DOFFLOAD_BY_OPENMP_TARGET -DOFFLOAD_BY_OPENMP_TARGET_DISTRIBUTE` | OpenMP target | デフォルトでは `distribute` 指示文を使用 |
-  | | 縮退モード | OpenMP を用いたマルチコアCPU向けのスレッド並列 |
+## Compilation Method
 
-  * 注意： コンパイルフラグとして `-DOFFLOAD_BY_OPENACC` を渡しても，使用するコンパイラに対して OpenACC を有効にするフラグ（例： NVIDIA HPC SDKにおいては`-acc`）を渡していない場合には，`-DOFFLOAD_BY_OPENACC` については自動的に無効化されます
+* Use compiler options to enable either [OpenACC](openacc.md) or [OpenMP target](openmp.md).
+* Specify the path to Solomon (the directory containing `solomon.hpp`) using an option such as `-I/path/to/solomon`.
+* Use the following compile-time flags to specify Solomon’s execution mode:
+
+  | Compile Flag                                                       | Backend Used    | Notes                                              |
+  | ------------------------------------------------------------------ | --------------- | -------------------------------------------------- |
+  | `-DOFFLOAD_BY_OPENACC`                                             | OpenACC         | Uses the `kernels` construct by default            |
+  | `-DOFFLOAD_BY_OPENACC -DOFFLOAD_BY_OPENACC_PARALLEL`               | OpenACC         | Uses the `parallel` construct by default           |
+  | `-DOFFLOAD_BY_OPENMP_TARGET`                                       | OpenMP target   | Uses the `loop` directive by default               |
+  | `-DOFFLOAD_BY_OPENMP_TARGET -DOFFLOAD_BY_OPENMP_TARGET_DISTRIBUTE` | OpenMP target   | Uses the `distribute` directive by default         |
+  | *(none)*                                                           | Degenerate mode | Thread parallelism for multicore CPUs using OpenMP |
+
+  * Note: Even if you pass `-DOFFLOAD_BY_OPENACC` as a compile-time flag, if you do not also pass the compiler flag to enable OpenACC (e.g., `-acc` in NVIDIA HPC SDK), `-DOFFLOAD_BY_OPENACC` will automatically be disabled.
