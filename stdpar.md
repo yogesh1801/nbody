@@ -1,66 +1,72 @@
-# C++17の標準言語規格を用いた実装の概要
+# Overview of Implementation Using the C++17 Standard Language Specification
 
-C++17の標準言語規格を用いた$N$体計算コード（直接法）の実装概要の紹介
+Introduction to the implementation of an \$N\$-body simulation code (direct method) using the C++17 standard language specification.
 
-## 実装方法
+## Implementation Method
 
-* algorithm, execution を include
+* Include **algorithm** and **execution** headers:
 
-   ```c++
-   #include <algorithm>
-   #include <execution>
-   ```
-
-* GPU上で計算させたいfor文を`std::for_each_n`に置換
-
-   ```c++
-   std::for_each_n(std::execution::par, boost::iterators::counting_iterator<int32_t>(0), num, [=](const int32_t ii){
-     ...
-   });
-   ```
-
-  * 実装方法は他にもあるが，ある程度長いfor文については上記の方法が最短コース
-    * 並列版アルゴリズムが提供されている関数については，`std::execution::par`を追加するだけで良い
-
-       ```c++
-       std::sort(std::execution::par, begin(), end());
-       ```
-
-  * counting_iterator の実装
-    * 取り得る実装方針
-      * 別途自分で実装する
-      * thrustなどのライブラリから呼ぶ
-    * ここではBoost C++から呼ぶこととした
-      * 作業量をなるべく減らすため，ライブラリ使用を選択
-      * 可搬性（NVIDIA HPC SDK以外のコンパイラでもコンパイルできるようにしておく）ためにthrustは対象外とした
-
-## 実装例
-
-| ソースコード | 実装概要 | 備考 |
-| ---- | ---- | ---- |
-| [cpp/stdpar/nbody_leapfrog2.cpp](/cpp/stdpar/nbody_leapfrog2.cpp) | Leapfrog法 | |
-| [cpp/stdpar/nbody_hermite4.cpp](/cpp/stdpar/nbody_hermite4.cpp) | Hermite法 | 一部関数のGPU化を無効化 |
-
-* 一部関数のGPU化について
-  * GPU上で動作させるとコードが正常に動作しなくなる関数があったため，暫定的にCPU上で動作させることにしている
-    * CUDA版ではGPU上で正常に動作するため，実装ミスやコンパイラのバグなどが原因と考えられる
-  * マクロ `EXEC_SMALL_FUNC_ON_HOST` を有効化（= 一部で `std::execution::par` ではなく `std::execution::seq` を指定して並列化を抑止）している
-  * 小さい関数なので，実行時間への影響も小さいと考えている
-  * 余分なCPU-GPU間のデータ転送が生じてしまっている
-
-## NVIDIA HPC SDKに関する情報
-
-### コンパイル・リンク
-
-* 標準的な引数（コンパイル時）
-
-  ```sh
-  -stdpar=gpu -gpu=cc90 -Minfo=accel,opt,stdpar # 標準言語規格を使用してGPU化，cc90（NVIDIA H100）向けに最適化，GPUオフローディングや性能最適化に関するコンパイラメッセージを出力
-  -stdpar=multicore -Minfo=opt,stdpar # 標準言語規格を使用してマルチコアCPU向けに並列化，性能最適化に関するコンパイラメッセージを出力
+  ```c++
+  #include <algorithm>
+  #include <execution>
   ```
 
-* 標準的な引数（リンク時）
+* Replace `for` loops to be executed on the GPU with `std::for_each_n`:
+
+  ```c++
+  std::for_each_n(std::execution::par, boost::iterators::counting_iterator<int32_t>(0), num, [=](const int32_t ii){
+    ...
+  });
+  ```
+
+  * There are other implementation methods, but for reasonably long loops, the above is the shortest approach.
+
+    * For algorithms where a parallel version is provided, it is enough to simply add `std::execution::par`.
+
+      ```c++
+      std::sort(std::execution::par, begin(), end());
+      ```
+
+  * Implementation of `counting_iterator`:
+
+    * Possible approaches:
+
+      * Implement your own
+      * Use a library such as **thrust**
+    * Here, Boost C++ is used:
+
+      * Library usage was chosen to minimize workload
+      * Thrust was excluded to maintain portability (to allow compilation with compilers other than NVIDIA HPC SDK).
+
+## Implementation Examples
+
+| Source Code                                                        | Implementation Overview | Notes                                     |
+| ------------------------------------------------------------------ | ----------------------- | ----------------------------------------- |
+| [cpp/stdpar/nbody\_leapfrog2.cpp](/cpp/stdpar/nbody_leapfrog2.cpp) | Leapfrog method         |                                           |
+| [cpp/stdpar/nbody\_hermite4.cpp](/cpp/stdpar/nbody_hermite4.cpp)   | Hermite method          | Some functions disabled for GPU execution |
+
+* Regarding functions disabled for GPU execution:
+
+  * Some functions did not work correctly when executed on the GPU, so they are temporarily executed on the CPU.
+
+    * In the CUDA version, they work correctly on the GPU, so the cause is assumed to be either an implementation error or a compiler bug.
+  * The macro `EXEC_SMALL_FUNC_ON_HOST` is enabled (i.e., for some parts `std::execution::seq` is specified instead of `std::execution::par` to suppress parallelization).
+  * Since these are small functions, the impact on execution time is considered minimal.
+  * However, this results in additional CPU–GPU data transfers.
+
+## Information on NVIDIA HPC SDK
+
+### Compilation and Linking
+
+* Typical compiler options (compilation phase):
 
   ```sh
-  -stdpar=gpu # GPU化した場合
+  -stdpar=gpu -gpu=cc90 -Minfo=accel,opt,stdpar # Use standard language parallelism for GPU offloading, optimized for cc90 (NVIDIA H100), output compiler messages on GPU offloading and optimizations
+  -stdpar=multicore -Minfo=opt,stdpar           # Use standard language parallelism for multicore CPU execution, output compiler messages on optimizations
+  ```
+
+* Typical linker options (linking phase):
+
+  ```sh
+  -stdpar=gpu # When GPU offloading is enabled
   ```
